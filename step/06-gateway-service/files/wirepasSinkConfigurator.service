@@ -1,0 +1,19 @@
+[Unit]
+Description=Automatic single shot sink configurator
+After=wirepasGatewayUpdate.service
+Requires=wirepasGatewayUpdate.service
+ConditionFileNotEmpty=/boot/firmware/nu/sink.env
+
+[Service]
+Type=oneshot
+
+ExecStart=su - nu -c "docker run \
+                           -v wirepas_dbus-volume:/var/run/dbus \
+                           --env-file /boot/firmware/nu/sink.env \
+                           wirepas/gateway_transport_service wm-node-conf set -s sink1 -S=yes"
+
+# If previous cmd was successfuly executed, mv sink.env 
+ExecStartPost=mv /boot/firmware/nu/sink.env /boot/firmware/nu/sink.success
+
+[Install]
+WantedBy=multi-user.target
