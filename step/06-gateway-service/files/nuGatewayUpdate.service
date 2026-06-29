@@ -1,5 +1,5 @@
 [Unit]
-Description=Wirepas Docker gateway update
+Description=Nu Docker gateway update
 After=docker.service network-online.target
 Requires=docker.service network-online.target
 ConditionFileNotEmpty=/boot/firmware/nu/gateway.env

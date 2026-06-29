@@ -1,0 +1,9 @@
+# WiFi credentials baked into the image at build time — never commit the real values.
+step/07-network/wifi.env
+
+# Bootstrap (raspi-provision) private key — see step/08-default-cert/README.
+step/08-default-cert/files/device-key.pem
+
+# Python bytecode
+__pycache__/
+*.pyc

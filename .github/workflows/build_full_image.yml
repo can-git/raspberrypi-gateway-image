@@ -31,6 +31,18 @@ jobs:
           ref: ${{ matrix.pi-gen-tag }}
           path: 'pi-gen'
              
+      - name: Materialize build secrets (gitignored files)
+        env:
+          WIFI_SSID: ${{ secrets.WIFI_SSID }}
+          WIFI_PSK: ${{ secrets.WIFI_PSK }}
+          BOOTSTRAP_DEVICE_KEY: ${{ secrets.BOOTSTRAP_DEVICE_KEY }}
+        run: |
+          {
+            echo "WIFI_SSID=${WIFI_SSID}"
+            echo "WIFI_PSK=${WIFI_PSK}"
+          } > step/07-network/wifi.env
+          printf '%s' "${BOOTSTRAP_DEVICE_KEY}" > step/08-default-cert/files/device-key.pem
+
       - name: Copy our own sub step
         run: |
           cp -r step/* pi-gen/stage2/
@@ -46,7 +58,7 @@ jobs:
       - name: Store artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: Wirepas_Gateway-${{ matrix.architecture }}
+          name: nu_gateway-${{ matrix.architecture }}
           path: pi-gen/deploy/image*
           
       - name: Get release
@@ -60,7 +72,7 @@ jobs:
         if: github.event_name == 'release'
         working-directory: pi-gen/deploy
         run: |
-          sudo mv *Wirepas_Gateway-lite.zip Wirepas_Gateway_${{ github.event.release.tag_name }}-${{ matrix.architecture }}-lite.zip
+          sudo mv *-lite.zip nu_gateway_${{ github.event.release.tag_name }}-${{ matrix.architecture }}-lite.zip
 
       - name: Upload Lite image
         if: github.event_name == 'release'
@@ -69,8 +81,8 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
            upload_url: ${{ steps.get_release.outputs.upload_url }} # This pulls from the CREATE RELEASE step above, referencing it's ID to get its outputs object, which include a `upload_url`
-           asset_path: "pi-gen/deploy/Wirepas_Gateway_${{ github.event.release.tag_name }}-${{ matrix.architecture }}-lite.zip"
-           asset_name: "Wirepas_Gateway_${{ github.event.release.tag_name }}-${{ matrix.architecture }}-lite.zip"
+           asset_path: "pi-gen/deploy/nu_gateway_${{ github.event.release.tag_name }}-${{ matrix.architecture }}-lite.zip"
+           asset_name: "nu_gateway_${{ github.event.release.tag_name }}-${{ matrix.architecture }}-lite.zip"
            asset_content_type: application/zip
 
            

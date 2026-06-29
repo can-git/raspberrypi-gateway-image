@@ -1,0 +1,14 @@
+[Unit]
+Description=Nu management agent (provisioning announce + remote setConfig)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=root
+ExecStart=/usr/bin/python3 /opt/nu-agent/agent.py
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target

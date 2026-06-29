@@ -1,82 +1,109 @@
-# Raspberry gateway image
+# Nu gateway image
 
-The purpose of this repository is to create automatically a ready to use Raspberry Pi image containing all the needed files to setup a Wirepas gateway.
-This image allows to easily configure the Wirepas sink and transport services as well as sink parameters from files located in the FAT32 boot partition of the Raspberry Pi which can be easily edited.
-Other Raspeberry Pi parameters like Network settings, Wi-Fi and others setting are not modified by the image.
+Builds a ready-to-use Raspberry Pi image for a Nu / Wirepas gateway. After flashing, the
+device comes up **online over WiFi**, runs the gateway + converter, **announces itself to the
+broker**, and can be **configured remotely** without touching the SD card again.
 
-## How it works?
+The base OS is built with [RPi-Distro/pi-gen](https://github.com/RPi-Distro/pi-gen) (Raspberry
+Pi OS Lite, trixie/arm64) and customised through the `step/` folders.
 
-The Raspberry base image is built with official [RPi-Distro/pi-gen](https://github.com/RPi-Distro/pi-gen) tool.
+## Access defaults
 
-On top of it, this image is customized with Docker tool to allow the usage of Wirepas gateway docker images that can be found on DockerHub.
+| Setting   | Value           |
+| --------- | --------------- |
+| Username  | `nu`            |
+| Password  | `yc2024+90TR`   |
+| Hostname  | `nugw`          |
+| SSH       | enabled         |
+| WiFi      | baked at build time (see [step/07-network](step/07-network)) |
 
+## Build-time secrets (never committed)
 
-## How to configure the gateway
+These are read at build time and are gitignored:
 
-In a standard configuration with one sink attached to the gateway and the gateway publishing to a single broker, the gateway can be configured with the file [gateway.env](templates/gateway.env).
-This file must be adapted to reflect your setup and copied under /boot/firmware/wirepas (after the image has been flashed to the SD-Card).
+- **WiFi credentials** — copy [step/07-network/wifi.env.example](step/07-network/wifi.env.example)
+  to `step/07-network/wifi.env` and fill in `WIFI_SSID` / `WIFI_PSK`. `WPA_COUNTRY` (in
+  [config](config)) must be set or the WiFi radio stays disabled.
+- **Bootstrap certificate** — `step/08-default-cert/files/{ca,device,device-key}.pem`. The
+  private key is gitignored; see [step/08-default-cert/README.md](step/08-default-cert/README.md).
 
-### Gateway version
-GATEWAY_TAG key allows you to specify a new version of gateway.
-Editing this key will allow you to switch to a newer version in future without the need to reflash the base image. Only a reboot is needed.
-If latest tag is used (by default), gateway will be automatically updated at each new release.
+## How a device comes up
 
-### Sink configuration
-Keys starting with WM_GW_SINK_* are related to sink configuration.
+1. **Flash + boot** → joins the default WiFi, gets a DHCP IP.
+2. The **management agent** reads its identity from `WM_GW_ID` in
+   `/boot/firmware/nu/gateway.env` (default `0` = unconfigured), connects to the broker with
+   the default bootstrap certificate (`/etc/nu/certs`) and, while not provisioned, announces
+   itself:
+   - `nu/device/<WM_GW_ID>/announce` → `{ gw_id, local_ip, mac, version, provisioned }`
+   You can watch this in MQTT Explorer.
+3. **Commissioning** (one by one): set a unique `WM_GW_ID`, install the per-customer
+   certificate over SSH, and (optionally) push config from MQTT Explorer.
 
-### Transport configuration
-Keys starting with WM_SERVICES_MQTT_* are related to broker configuration
+## Remote configuration (setConfig)
 
-To use the local MQTT broker installed previously, the following config can be set:
-```ini
-WM_SERVICES_MQTT_HOSTNAME=localhost
-WM_SERVICES_MQTT_PORT=1883
-WM_SERVICES_MQTT_USERNAME=
-WM_SERVICES_MQTT_PASSWORD=
-WM_SERVICES_MQTT_FORCE_UNSECURE=true
+The agent subscribes to `nu/device/<WM_GW_ID>/config/set` and applies the payload, then **reboots
+to apply and verifies connectivity** — if the broker does not come back within
+`NU_VERIFY_TIMEOUT`, it **rolls back to the last-known-good config** automatically.
+
+| Topic | Direction |
+| ----- | --------- |
+| `nu/device/<WM_GW_ID>/announce`       | device → broker |
+| `nu/device/<WM_GW_ID>/config/set`     | broker → device |
+| `nu/device/<WM_GW_ID>/config/result`  | device → broker |
+| `nu/device/<WM_GW_ID>/status` (retained) | device → broker |
+
+Example `config/set` payload:
+
+```json
+{
+  "rev": 1,
+  "files": {
+    "gateway.env": { "WM_GW_ID": "101034168" },
+    "tenant.env":  { "PRODUCT": "t", "TENANT": "musteriX", "SITE": "atasehir", "VER": "v1" },
+    "sink.env":    { "WM_CN_NETWORK_ADDRESS": "0xD8D42B", "WM_CN_NETWORK_CHANNEL": "9" }
+  },
+  "wifi": { "ssid": "Site-WiFi", "psk": "site-password" }
+}
 ```
 
-## How to interact locally with gateway
-All the following commands, required to be connected to a console on the gateway (through SSH).
+- `rev` must increase each time (older/equal revs are ignored → idempotent).
+- `files` only accepts `gateway.env`, `sink.env`, `tenant.env`; any key inside is set/added,
+  comments are preserved.
+- `wifi` is optional. ⚠️ A wrong WiFi/broker change triggers the automatic rollback after reboot.
 
-## Connecting with SSH
-By default, SSH is enabled on this image with following credentials:
+## Commissioning a device (operator runbook)
 
-Login  | Password
-----   | --------
-wirepas| wirepas_pw
+The per-customer certificate is generated once per customer on your server and **copied over
+SSH** (it is shared across all of that customer's devices):
 
-Hostname is set to **wirepasgw**
-
-## Get the logs
-From wirepas user root folder, execute this command:
 ```bash
-docker-compose logs
+# IP comes from the announce beacon in MQTT Explorer
+scp ca.pem device.pem device-key.pem nu@<device-ip>:/tmp/
+ssh nu@<device-ip> "sudo mv /tmp/*.pem /etc/nu/certs/ && sudo systemctl restart nuManagementAgent && docker restart nu-converter"
 ```
 
-## Observe traffic on dbus
-To observe packets received from sink(s) on dbus, execute this command:
+Then publish a `config/set` message (with a unique `WM_GW_ID`) from MQTT Explorer.
+
+## Boot config files
+
+The gateway reads its config from the FAT boot partition at `/boot/firmware/nu/`
+(`gateway.env`, `sink.env`, `tenant.env`). Templates are in [templates/](templates). These can
+be edited offline on the SD card, or remotely via setConfig.
+
+## Local commands (over SSH)
+
 ```bash
-docker run --rm -v wirepas_dbus-volume:/var/run/dbus -ti wirepas/gateway_transport_service wm-dbus-print
+docker compose -f /home/nu/docker-compose.yml logs        # gateway logs
+docker logs nu-converter -f                                # converter logs
+journalctl -u nuManagementAgent -f                         # management agent logs
+docker run --rm -v nu_dbus-volume:/var/run/dbus wirepas/gateway_transport_service wm-node-conf list
 ```
 
-## Get/set sink(s) configuration
-To see the current sink(s) configuration, please execute this command:
-```bash
-docker run --rm -v wirepas_dbus-volume:/var/run/dbus wirepas/gateway_transport_service wm-node-conf list
-```
+> Note: the gateway container images themselves come from `wirepas/...` on Docker Hub (the
+> actual gateway software). Everything user-facing — user, hostname, services, volumes, paths —
+> is `nu`.
 
-wm-node-conf allows to configure sink locally too. To see its usage and different options, execute this command:
-```bash
-docker run --rm -v wirepas_dbus-volume:/var/run/dbus wirepas/gateway_transport_service wm-node-conf
-```
+## Releases
 
-For example, following command allows you to stop a sink named sink1:
-```bash
-docker run --rm -v wirepas_dbus-volume:/var/run/dbus wirepas/gateway_transport_service wm-node-conf set -s sink1 -S False
-```
-
-# How are released image built?
-
-Images under [release tab](https://github.com/wirepas/raspberry-gateway-image/releases) are automatically build with github actions when repository is tagged.
-
+Images are built by GitHub Actions on tag/release; see
+[.github/workflows/build_full_image.yml](.github/workflows/build_full_image.yml).
