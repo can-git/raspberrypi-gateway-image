@@ -11,6 +11,7 @@ Responsibilities
       - set/replace ANY key in the boot env files (gateway.env / sink.env / tenant.env),
         preserving comments and unrelated lines
       - set the WiFi connection
+      - rotate the broker cert bundle (ca / device / device_key)
    then snapshot the previous (known-good) config, mark the new config for
    verification, and reboot to apply.
 4. After reboot, verify connectivity: if the broker connects, COMMIT; if it does not
@@ -19,6 +20,7 @@ Responsibilities
    nu/device/<uuid>/status.
 """
 
+import base64
 import json
 import logging
 import os
@@ -35,6 +37,7 @@ import paho.mqtt.client as mqtt
 NU_DIR = os.environ.get("NU_DIR", "/etc/nu")
 ENV_DIR = os.environ.get("NU_ENV_DIR", "/boot/firmware/nu")
 WIFI_DIR = os.environ.get("NU_WIFI_DIR", "/etc/NetworkManager/system-connections")
+CERTS_DIR = os.environ.get("NU_CERTS_DIR", "/etc/nu/certs")
 PROVISIONED_FILE = f"{NU_DIR}/provisioned"
 REV_FILE = f"{NU_DIR}/config-rev"
 PENDING_FILE = f"{NU_DIR}/pending-verify"
@@ -200,6 +203,41 @@ def apply_wifi(wifi):
     log.info("Wrote WiFi connection for SSID '%s'", ssid)
 
 
+# the broker cert bundle: payload key -> (filename on disk, file mode)
+CERT_FILES = {
+    "ca": ("ca.pem", 0o644),
+    "device": ("device.pem", 0o644),
+    "device_key": ("device-key.pem", 0o600),
+}
+
+
+def apply_certs(certs):
+    """Write a new broker cert bundle to CERTS_DIR. `certs` maps any of
+    {ca, device, device_key} to base64-encoded PEM. Validity is proven later by the
+    reboot+reconnect verify: a bad/unauthorized cert can't connect -> watchdog rolls back."""
+    if not isinstance(certs, dict):
+        raise ValueError("certs must be an object")
+    os.makedirs(CERTS_DIR, exist_ok=True)
+    written = []
+    for key, (fname, mode) in CERT_FILES.items():
+        if key not in certs:
+            continue
+        try:
+            data = base64.b64decode(certs[key], validate=True)
+        except (ValueError, TypeError) as e:
+            raise ValueError(f"cert '{key}' is not valid base64: {e}") from e
+        if b"-----BEGIN" not in data:
+            raise ValueError(f"cert '{key}' does not look like PEM")
+        path = os.path.join(CERTS_DIR, fname)
+        with open(path, "wb") as f:
+            f.write(data)
+        os.chmod(path, mode)
+        written.append(fname)
+    if not written:
+        raise ValueError("certs requires at least one of: ca, device, device_key")
+    log.info("Wrote certs: %s", written)
+
+
 # --- snapshot / rollback ---------------------------------------------------
 def _copy_tree(src, dst):
     if os.path.isdir(dst):
@@ -217,12 +255,14 @@ def snapshot_lastgood():
     os.makedirs(LASTGOOD_DIR, exist_ok=True)
     _copy_tree(ENV_DIR, f"{LASTGOOD_DIR}/env")
     _copy_tree(WIFI_DIR, f"{LASTGOOD_DIR}/wifi")
+    _copy_tree(CERTS_DIR, f"{LASTGOOD_DIR}/certs")
     log.info("Snapshotted last-known-good config")
 
 
 def restore_lastgood():
     env_snap = f"{LASTGOOD_DIR}/env"
     wifi_snap = f"{LASTGOOD_DIR}/wifi"
+    certs_snap = f"{LASTGOOD_DIR}/certs"
     if os.path.isdir(env_snap):
         os.makedirs(ENV_DIR, exist_ok=True)
         for name in os.listdir(env_snap):
@@ -235,6 +275,12 @@ def restore_lastgood():
             dst = os.path.join(WIFI_DIR, name)
             shutil.copy2(os.path.join(wifi_snap, name), dst)
             os.chmod(dst, 0o600)
+    if os.path.isdir(certs_snap):
+        os.makedirs(CERTS_DIR, exist_ok=True)
+        for name in os.listdir(certs_snap):
+            dst = os.path.join(CERTS_DIR, name)
+            shutil.copy2(os.path.join(certs_snap, name), dst)
+            os.chmod(dst, 0o600 if name.endswith("-key.pem") else 0o644)
     log.info("Restored last-known-good config")
 
 
@@ -329,6 +375,8 @@ class Agent:
                 apply_files(payload["files"])
             if "wifi" in payload:
                 apply_wifi(payload["wifi"])
+            if "certs" in payload:
+                apply_certs(payload["certs"])
         except Exception as e:  # noqa: BLE001 - report any apply failure back
             log.exception("Failed to apply config")
             self.publish_result(rev, "error", str(e))
