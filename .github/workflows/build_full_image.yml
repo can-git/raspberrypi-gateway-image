@@ -25,23 +25,17 @@ jobs:
         include:
           - architecture: arm64
             pi-gen-tag: 2025-10-01-raspios-trixie-arm64
-            # Standard amd64 runner + QEMU: the free arm64 runners are
-            # public-repo-only and this repo must stay PRIVATE (the image
-            # embeds WiFi creds, the user password and the bootstrap key).
-            runner: ubuntu-latest
+            # Native arm64 runner (fast, no QEMU) — free on PUBLIC repos only.
+            # KARAR (Can, 2026-07-21): repo stays public, old June setup; the
+            # publicly downloadable artifact embedding WiFi creds/password/
+            # bootstrap key is a known, accepted risk (same as before).
+            runner: ubuntu-24.04-arm
 
     runs-on: ${{ matrix.runner }}
 
     steps:
       - name: checkout our repo
         uses: actions/checkout@v4
-
-      - name: Install QEMU user emulation (arm64 for pi-gen + nugw build)
-        # The package (not just binfmt registration) is required: pi-gen's
-        # build-docker.sh looks for the qemu-aarch64-static binary on the host.
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y qemu-user-static binfmt-support
 
       - name: checkout pi-gen
         uses: actions/checkout@v4
