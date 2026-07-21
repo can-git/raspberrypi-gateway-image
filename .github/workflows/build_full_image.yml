@@ -23,13 +23,21 @@ jobs:
         include:
           - architecture: arm64
             pi-gen-tag: 2025-10-01-raspios-trixie-arm64
-            runner: ubuntu-24.04-arm
+            # Standard amd64 runner + QEMU: the free arm64 runners are
+            # public-repo-only and this repo must stay PRIVATE (the image
+            # embeds WiFi creds, the user password and the bootstrap key).
+            runner: ubuntu-latest
 
     runs-on: ${{ matrix.runner }}
 
     steps:
       - name: checkout our repo
         uses: actions/checkout@v4
+
+      - name: Set up QEMU (arm64 emulation for pi-gen + nugw build)
+        uses: docker/setup-qemu-action@v3
+        with:
+          platforms: arm64
 
       - name: checkout pi-gen
         uses: actions/checkout@v4
@@ -46,7 +54,7 @@ jobs:
 
       - name: Build nugw container image and freeze it into the step
         run: |
-          docker build -t nugw:latest -f nu-gateway-service/docker/Dockerfile nu-gateway-service
+          docker build --platform linux/arm64 -t nugw:latest -f nu-gateway-service/docker/Dockerfile nu-gateway-service
           docker save -o step/06-gateway-service/files/nugw.tar nugw:latest
           ls -lh step/06-gateway-service/files/nugw.tar
 
