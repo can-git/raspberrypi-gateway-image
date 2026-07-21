@@ -84,7 +84,9 @@ runner, secrets materialized automatically; see
 [.github/workflows/build_full_image.yml](.github/workflows/build_full_image.yml).
 Required repo secrets: `WIFI_SSID`, `WIFI_PSK`, `FIRST_USER_PASS`,
 `BOOTSTRAP_DEVICE_KEY`, `BITBUCKET_TOKEN` (Atlassian API token, Bitbucket
-`read:repository` scope — used to clone nu-gateway-service).
+`read:repository` scope — used to clone nu-gateway-service),
+`WIREPAS_MQTT_PASSWORD` (Wirepas backend broker credential, baked into
+`gateway.env` — without it the remote transport is "not authorised").
 
 **Local:** materialize the same inputs by hand (wifi.env, device-key.pem,
 `FIRST_USER_PASS` in `config`, `nugw.tar`, `files/provision/`), copy `step/*` into

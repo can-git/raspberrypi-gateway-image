@@ -81,6 +81,7 @@ jobs:
           WIFI_PSK: ${{ secrets.WIFI_PSK }}
           BOOTSTRAP_DEVICE_KEY: ${{ secrets.BOOTSTRAP_DEVICE_KEY }}
           FIRST_USER_PASS: ${{ secrets.FIRST_USER_PASS }}
+          WIREPAS_MQTT_PASSWORD: ${{ secrets.WIREPAS_MQTT_PASSWORD }}
         run: |
           {
             echo "WIFI_SSID=${WIFI_SSID}"
@@ -88,6 +89,9 @@ jobs:
           } > step/07-network/wifi.env
           printf '%s' "${BOOTSTRAP_DEVICE_KEY}" > step/08-default-cert/files/device-key.pem
           echo "FIRST_USER_PASS='${FIRST_USER_PASS}'" >> config
+          # Wirepas backend credential -> baked gateway.env. Without it the remote
+          # transport gets "not authorised" on every fresh device (bench 2026-07-21).
+          sed -i "s|^WM_SERVICES_MQTT_PASSWORD=.*|WM_SERVICES_MQTT_PASSWORD=${WIREPAS_MQTT_PASSWORD}|" step/06-gateway-service/files/gateway.env
 
       - name: Copy our own sub step
         run: |
