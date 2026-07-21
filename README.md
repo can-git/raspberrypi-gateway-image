@@ -79,7 +79,8 @@ docker run --rm -v nu_dbus-volume:/var/run/dbus wirepas/gateway_transport_servic
 runner, secrets materialized automatically; see
 [.github/workflows/build_full_image.yml](.github/workflows/build_full_image.yml).
 Required repo secrets: `WIFI_SSID`, `WIFI_PSK`, `FIRST_USER_PASS`,
-`BOOTSTRAP_DEVICE_KEY`, `NUGW_CLONE_URL`.
+`BOOTSTRAP_DEVICE_KEY`, `BITBUCKET_TOKEN` (Atlassian API token, Bitbucket
+`read:repository` scope — used to clone nu-gateway-service).
 
 **Local:** materialize the same inputs by hand (wifi.env, device-key.pem,
 `FIRST_USER_PASS` in `config`, `nugw.tar`, `files/provision/`), copy `step/*` into

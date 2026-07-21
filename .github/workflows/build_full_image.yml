@@ -4,8 +4,10 @@
 #   WIFI_SSID / WIFI_PSK      - default WiFi baked into the image
 #   FIRST_USER_PASS           - password of the "nu" user (not committed)
 #   BOOTSTRAP_DEVICE_KEY      - raspi-provision private key (PEM)
-#   NUGW_CLONE_URL            - authenticated clone URL of nu-gateway-service
-#                               (https://<user>:<app-password>@bitbucket.org/nutechnologysoftware/nu-gateway-service.git)
+#   BITBUCKET_TOKEN           - Atlassian API token (Bitbucket app, read:repository
+#                               scope) to clone nu-gateway-service. Alternative:
+#                               NUGW_CLONE_URL = full clone URL WITH credentials
+#                               embedded (username alone does not work on a runner).
 
 name: Build Full Rpi image from scratch
 
@@ -49,8 +51,20 @@ jobs:
       - name: clone nu-gateway-service (Bitbucket)
         env:
           NUGW_CLONE_URL: ${{ secrets.NUGW_CLONE_URL }}
+          BITBUCKET_TOKEN: ${{ secrets.BITBUCKET_TOKEN }}
         run: |
-          git clone --depth 1 "${NUGW_CLONE_URL}" nu-gateway-service
+          # Preferred: BITBUCKET_TOKEN = Atlassian API token (Bitbucket app,
+          # read:repository scope) — the fixed clone URL is built here.
+          # NUGW_CLONE_URL (full URL WITH credentials embedded) still wins if set
+          # to a value that actually contains a secret.
+          if [ -n "${BITBUCKET_TOKEN}" ]; then
+            git clone --depth 1 "https://x-bitbucket-api-token-auth:${BITBUCKET_TOKEN}@bitbucket.org/nutechnologysoftware/nu-gateway-service.git" nu-gateway-service
+          elif [ -n "${NUGW_CLONE_URL}" ]; then
+            git clone --depth 1 "${NUGW_CLONE_URL}" nu-gateway-service
+          else
+            echo "ERROR: set the BITBUCKET_TOKEN secret (Atlassian API token, read:repository)" >&2
+            exit 1
+          fi
 
       - name: Build nugw container image and freeze it into the step
         run: |
