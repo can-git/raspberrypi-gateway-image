@@ -15,6 +15,8 @@ User=nu
 ExecStartPre=-docker load --input transport_service.tar
 ExecStartPre=-docker load --input sink_service.tar
 ExecStartPre=-docker load --input dbus_service.tar
+# nugw is never pulled from a registry: it is baked into the image as a tar
+ExecStartPre=-docker load --input nugw.tar
 
 # Pull just in case we use latest or egde tag
 ExecStartPre=-docker compose pull
@@ -26,6 +28,7 @@ ExecStart=docker compose up -d
 ExecStartPost=-rm transport_service.tar
 ExecStartPost=-rm sink_service.tar
 ExecStartPost=-rm dbus_service.tar
+ExecStartPost=-rm nugw.tar
 
 
 [Install]

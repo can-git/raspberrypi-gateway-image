@@ -1,17 +1,20 @@
 #!/bin/bash -e
 
-# Bake the default "raspi-provision" bootstrap certificate into every device.
-# This is a SHARED, low-privilege identity (broker ACL must restrict it to the
-# nu/device/+/... provisioning topics only). It lets a freshly flashed device
-# connect to the broker and announce itself until the per-customer certificate
-# is installed manually over SSH into the same folder.
+# Bake the shared "raspi-provision" bootstrap identity into every device.
+# It lives in /etc/nu/provision-certs (nuprov's NUPROV_PROV_CERTS default) and
+# the broker ACL must only ever allow it on the provisioning topics.
+#
+# /etc/nu/certs stays EMPTY in the image: that is the per-customer mTLS
+# certificate directory, delivered by the provisioner during commissioning
+# (nu-gateway-service RUNBOOK §5). nu-gateway mounts it read-only.
 
-echo "Create /etc/nu/certs"
+echo "Create cert dirs"
+install -v -d -m 755 "${ROOTFS_DIR}/etc/nu/provision-certs"
 install -v -d -m 755 "${ROOTFS_DIR}/etc/nu/certs"
 
 echo "Install default bootstrap certificate (raspi-provision)"
-install -m 644 files/ca.pem          "${ROOTFS_DIR}/etc/nu/certs/ca.pem"
-install -m 644 files/device.pem      "${ROOTFS_DIR}/etc/nu/certs/device.pem"
-install -m 600 files/device-key.pem  "${ROOTFS_DIR}/etc/nu/certs/device-key.pem"
+install -m 644 files/ca.pem          "${ROOTFS_DIR}/etc/nu/provision-certs/ca.pem"
+install -m 644 files/device.pem      "${ROOTFS_DIR}/etc/nu/provision-certs/device.pem"
+install -m 600 files/device-key.pem  "${ROOTFS_DIR}/etc/nu/provision-certs/device-key.pem"
 
-echo "Default certificate installed into /etc/nu/certs"
+echo "Bootstrap certificate installed into /etc/nu/provision-certs"

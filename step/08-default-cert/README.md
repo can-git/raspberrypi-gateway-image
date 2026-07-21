@@ -2,22 +2,25 @@
 
 `files/ca.pem`, `files/device.pem`, `files/device-key.pem` are the **shared bootstrap
 identity** (`CN=raspi-provision`) baked into every image. They are installed to
-`/etc/nu/certs` so a freshly flashed device can connect to the broker and publish its
-`nu/device/<uuid>/announce` beacon before it has a real per-customer certificate.
+`/etc/nu/provision-certs` — the provisioner (`nu-provision`) uses them to reach TBMQ
+over mutual TLS and publish its beacon on the provisioning topic until the device is
+commissioned.
+
+Two separate cert directories exist on a device:
+
+| Directory | Identity | Who uses it |
+| --------- | -------- | ----------- |
+| `/etc/nu/provision-certs` | shared `raspi-provision` (baked here) | `nu-provision` (beacon + setConfig) |
+| `/etc/nu/certs` | per-customer (delivered at commissioning) | `nu-gateway` telemetry mTLS |
+
+`/etc/nu/certs` is created **empty** by this step; the per-customer certificate is
+delivered into it by the provisioning flow (see `nu-gateway-service` RUNBOOK §5) —
+not over ad-hoc SSH.
 
 ## Security
-- This identity is shared across all un-provisioned devices, so on the broker (TBMQ)
-  its ACL **must** be restricted to the provisioning topics only
-  (`nu/device/+/announce`, `nu/device/+/config/set`, `nu/device/+/config/result`,
-  `nu/device/+/status`). It must **not** be allowed on the telemetry topics.
-- `files/device-key.pem` is the bootstrap private key. It is **gitignored** by default
-  (see repo root `.gitignore`). Place it here before building, or provide it from a CI
-  secret. Keep it revocable.
-
-## Replacing with the real certificate (per customer, manual)
-The per-customer certificate is delivered over SSH during commissioning:
-
-```bash
-scp ca.pem device.pem device-key.pem nu@<device-ip>:/tmp/
-ssh nu@<device-ip> "sudo mv /tmp/*.pem /etc/nu/certs/ && docker restart nu-converter"
-```
+- The bootstrap identity is shared across all un-provisioned devices, so on the
+  broker (TBMQ) its ACL **must** be restricted to the provisioning topics only
+  (`nu/provision`). It must **not** be allowed on the telemetry topics.
+- `files/device-key.pem` is the bootstrap private key. It is **gitignored**
+  (see repo root `.gitignore`). Place it here before a local build, or let CI
+  materialize it from the `BOOTSTRAP_DEVICE_KEY` secret. Keep it revocable.

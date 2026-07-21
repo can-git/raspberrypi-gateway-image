@@ -15,6 +15,14 @@ install -m 644 files/nuSinkConfigurator.service	"${ROOTFS_DIR}/etc/systemd/syste
 echo "Add script to preload images without docker installed"
 install -m 755 files/download-frozen-image-v2.sh  "${ROOTFS_DIR}/home/${FIRST_USER_NAME}/"
 
+echo "Preload the nugw image tar (materialized by CI from nu-gateway-service)"
+if [ -f files/nugw.tar ]; then
+	install -m 644 files/nugw.tar "${ROOTFS_DIR}/home/${FIRST_USER_NAME}/"
+else
+	echo "ERROR: files/nugw.tar missing — build it from nu-gateway-service before running pi-gen" >&2
+	exit 1
+fi
+
 echo "Add mosquitto config to accept ws connection"
 install -m 644 files/config_ws_tcp.conf	"${ROOTFS_DIR}/etc/mosquitto/conf.d/"
 

@@ -4,7 +4,8 @@ RELEASE='trixie'
 ENABLE_SSH=1
 TARGET_HOSTNAME='nugw'
 FIRST_USER_NAME='nu'
-FIRST_USER_PASS='yc2024+90TR'
+# FIRST_USER_PASS is NOT committed. CI appends it from the FIRST_USER_PASS secret;
+# for a local build append it here (or export it) before running pi-gen.
 # Headless gateway: only the lite stages are needed (no desktop / no piwiz first-run wizard)
 STAGE_LIST="stage0 stage1 stage2"
 DISABLE_FIRST_BOOT_USER_RENAME=1

@@ -7,3 +7,7 @@ step/08-default-cert/files/device-key.pem
 # Python bytecode
 __pycache__/
 *.pyc
+
+# Materialized at build time from nu-gateway-service (Bitbucket) - never commit.
+step/06-gateway-service/files/nugw.tar
+step/10-nu-provision/files/provision/

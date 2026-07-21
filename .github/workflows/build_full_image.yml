@@ -1,10 +1,17 @@
-# This is a workflow to build image with pi-gen tool
+# Builds the "nu" golden gateway image with pi-gen on a native arm64 runner.
+#
+# Required repo secrets:
+#   WIFI_SSID / WIFI_PSK      - default WiFi baked into the image
+#   FIRST_USER_PASS           - password of the "nu" user (not committed)
+#   BOOTSTRAP_DEVICE_KEY      - raspi-provision private key (PEM)
+#   NUGW_CLONE_URL            - authenticated clone URL of nu-gateway-service
+#                               (https://<user>:<app-password>@bitbucket.org/nutechnologysoftware/nu-gateway-service.git)
 
 name: Build Full Rpi image from scratch
 
 on:
   workflow_dispatch:
-  
+
   release:
     types: [created]
 
@@ -23,34 +30,55 @@ jobs:
     steps:
       - name: checkout our repo
         uses: actions/checkout@v4
-        
+
       - name: checkout pi-gen
         uses: actions/checkout@v4
         with:
           repository: 'RPi-Distro/pi-gen'
           ref: ${{ matrix.pi-gen-tag }}
           path: 'pi-gen'
-             
+
+      - name: clone nu-gateway-service (Bitbucket)
+        env:
+          NUGW_CLONE_URL: ${{ secrets.NUGW_CLONE_URL }}
+        run: |
+          git clone --depth 1 "${NUGW_CLONE_URL}" nu-gateway-service
+
+      - name: Build nugw container image and freeze it into the step
+        run: |
+          docker build -t nugw:latest -f nu-gateway-service/docker/Dockerfile nu-gateway-service
+          docker save -o step/06-gateway-service/files/nugw.tar nugw:latest
+          ls -lh step/06-gateway-service/files/nugw.tar
+
+      - name: Materialize nu-provision source into the step
+        run: |
+          cp -r nu-gateway-service/provision step/10-nu-provision/files/provision
+          rm -rf step/10-nu-provision/files/provision/tests \
+                 step/10-nu-provision/files/provision/__pycache__ \
+                 step/10-nu-provision/files/provision/.pytest_cache
+
       - name: Materialize build secrets (gitignored files)
         env:
           WIFI_SSID: ${{ secrets.WIFI_SSID }}
           WIFI_PSK: ${{ secrets.WIFI_PSK }}
           BOOTSTRAP_DEVICE_KEY: ${{ secrets.BOOTSTRAP_DEVICE_KEY }}
+          FIRST_USER_PASS: ${{ secrets.FIRST_USER_PASS }}
         run: |
           {
             echo "WIFI_SSID=${WIFI_SSID}"
             echo "WIFI_PSK=${WIFI_PSK}"
           } > step/07-network/wifi.env
           printf '%s' "${BOOTSTRAP_DEVICE_KEY}" > step/08-default-cert/files/device-key.pem
+          echo "FIRST_USER_PASS='${FIRST_USER_PASS}'" >> config
 
       - name: Copy our own sub step
         run: |
           cp -r step/* pi-gen/stage2/
-     
+
       - name: copy config
         run: |
            cp config pi-gen/
-        
+
       - name: run script to build gateway image
         run: ./build-docker.sh
         working-directory: pi-gen
@@ -60,14 +88,14 @@ jobs:
         with:
           name: nu_gateway-${{ matrix.architecture }}
           path: pi-gen/deploy/image*
-          
+
       - name: Get release
         if: github.event_name == 'release'
         id: get_release
         uses: bruceadams/get-release@v1.2.1
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          
+
       - name: Rename artifacts before release
         if: github.event_name == 'release'
         working-directory: pi-gen/deploy
@@ -80,9 +108,7 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-           upload_url: ${{ steps.get_release.outputs.upload_url }} # This pulls from the CREATE RELEASE step above, referencing it's ID to get its outputs object, which include a `upload_url`
+           upload_url: ${{ steps.get_release.outputs.upload_url }}
            asset_path: "pi-gen/deploy/nu_gateway_${{ github.event.release.tag_name }}-${{ matrix.architecture }}-lite.zip"
            asset_name: "nu_gateway_${{ github.event.release.tag_name }}-${{ matrix.architecture }}-lite.zip"
            asset_content_type: application/zip
-
-           
