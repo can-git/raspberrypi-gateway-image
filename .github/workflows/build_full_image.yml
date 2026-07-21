@@ -36,10 +36,12 @@ jobs:
       - name: checkout our repo
         uses: actions/checkout@v4
 
-      - name: Set up QEMU (arm64 emulation for pi-gen + nugw build)
-        uses: docker/setup-qemu-action@v3
-        with:
-          platforms: arm64
+      - name: Install QEMU user emulation (arm64 for pi-gen + nugw build)
+        # The package (not just binfmt registration) is required: pi-gen's
+        # build-docker.sh looks for the qemu-aarch64-static binary on the host.
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y qemu-user-static binfmt-support
 
       - name: checkout pi-gen
         uses: actions/checkout@v4
