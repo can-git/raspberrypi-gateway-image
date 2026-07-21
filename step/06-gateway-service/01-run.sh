@@ -3,6 +3,10 @@
 echo "Create nu folder on boot"
 install -v -d "${ROOTFS_DIR}/boot/firmware/nu"
 
+echo "Bake the default gateway.env (WM_GW_ID=0) — nuGatewayUpdate's start condition;
+without it the docker stack never comes up on a fresh device (bench find 2026-07-21)"
+install -m 755 files/gateway.env "${ROOTFS_DIR}/boot/firmware/nu/gateway.env"
+
 echo "Add docker compose to home folder"
 install -m 755 files/docker-compose.yml	"${ROOTFS_DIR}/home/${FIRST_USER_NAME}/"
 

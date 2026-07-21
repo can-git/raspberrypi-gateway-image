@@ -60,9 +60,13 @@ this repo only bakes those components into an image and adds nothing of its own.
    `provision:false` → reboot → normal mode.
 
 Boot config lives on the FAT partition at `/boot/firmware/nu/` (`gateway.env`,
-`sink.env` → `sink.success`, `gateway.json` after commissioning). Templates for the
-env files are in [templates/](templates). `tenant.env` is retired (KARAR 2026-07-21):
-product/site identity lives in `gateway.json` via setConfig.
+`sink.env` → `sink.success`, `gateway.json` after commissioning). `gateway.env` is
+baked by [step/06](step/06-gateway-service) with `WM_GW_ID=0` — it is
+`nuGatewayUpdate`'s start condition, so a fresh device brings the stack up
+immediately. `sink.env` is NOT baked: it arrives later as a one-shot work order
+from the provisioner ([templates/sink.env](templates/sink.env) is the reference).
+`tenant.env` is retired (KARAR 2026-07-21): product/site identity lives in
+`gateway.json` via setConfig.
 
 ## Local commands (over SSH)
 
