@@ -27,6 +27,10 @@ else
 	exit 1
 fi
 
+echo "Register nu-registry as insecure (OTA v2 image pull — KARAR 2026-07-22)"
+install -v -d "${ROOTFS_DIR}/etc/docker"
+install -m 644 files/daemon.json "${ROOTFS_DIR}/etc/docker/daemon.json"
+
 echo "Add mosquitto config to accept ws connection"
 install -m 644 files/config_ws_tcp.conf	"${ROOTFS_DIR}/etc/mosquitto/conf.d/"
 
