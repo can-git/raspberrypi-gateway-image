@@ -1,0 +1,57 @@
+# Legacy migration helper (KARAR 2026-07-22): the field's legacy Wirepas-image
+# gateways run 32-bit Raspbian (armv7l) — the arm64 nugw image cannot run there.
+# This workflow cross-builds an armv7 nugw tar for the REMOTE-BOOTSTRAP migration
+# path (nu-gateway-service docs/legacy-migration.md). It does NOT touch the SD
+# image build; run it on demand when preparing a legacy conversion.
+#
+# Output: nugw-armv7 artifact (nugw-armv7.tar + its sha256) — served over HTTPS
+# for the OTA v2 update command, or scp'd during a bootstrap conversion.
+name: Build nugw armv7 tar (legacy migration)
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build_nugw_armv7:
+    runs-on: ubuntu-latest   # x86 + qemu: arm64 GH runners can't execute 32-bit arm
+
+    steps:
+      - name: clone nu-gateway-service (Bitbucket)
+        env:
+          NUGW_CLONE_URL: ${{ secrets.NUGW_CLONE_URL }}
+          BITBUCKET_TOKEN: ${{ secrets.BITBUCKET_TOKEN }}
+        run: |
+          # Same credential contract as build_full_image.yml.
+          if [ -n "${BITBUCKET_TOKEN}" ]; then
+            git clone --depth 1 "https://x-bitbucket-api-token-auth:${BITBUCKET_TOKEN}@bitbucket.org/nutechnologysoftware/nu-gateway-service.git" nu-gateway-service
+          elif [ -n "${NUGW_CLONE_URL}" ]; then
+            git clone --depth 1 "${NUGW_CLONE_URL}" nu-gateway-service
+          else
+            echo "ERROR: set the BITBUCKET_TOKEN secret (Atlassian API token, read:repository)" >&2
+            exit 1
+          fi
+
+      - name: Set up QEMU (arm/v7 emulation)
+        uses: docker/setup-qemu-action@v3
+        with:
+          platforms: arm
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build armv7 nugw and save tar
+        run: |
+          docker buildx build --platform linux/arm/v7 --load \
+            -t nugw:latest -f nu-gateway-service/docker/Dockerfile nu-gateway-service
+          docker save -o nugw-armv7.tar nugw:latest
+          sha256sum nugw-armv7.tar | tee nugw-armv7.tar.sha256
+          ls -lh nugw-armv7.tar
+
+      - name: Store artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: nugw-armv7
+          path: |
+            nugw-armv7.tar
+            nugw-armv7.tar.sha256
+          retention-days: 30
