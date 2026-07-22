@@ -67,6 +67,20 @@ jobs:
           docker build --platform linux/arm64 -t nugw:latest -f nu-gateway-service/docker/Dockerfile nu-gateway-service
           docker save -o step/06-gateway-service/files/nugw.tar nugw:latest
           ls -lh step/06-gateway-service/files/nugw.tar
+          # OTA v2 (KARAR 2026-07-22): the same tar doubles as the OTA payload —
+          # published as its own artifact (with digest) so field updates never
+          # require a reflash (nu-gateway-service RUNBOOK 6.3).
+          cp step/06-gateway-service/files/nugw.tar nugw-ota.tar
+          sha256sum nugw-ota.tar | tee nugw-ota.tar.sha256
+
+      - name: Store nugw OTA artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: nugw-ota
+          path: |
+            nugw-ota.tar
+            nugw-ota.tar.sha256
+          retention-days: 30
 
       - name: Materialize nu-provision source into the step
         run: |
